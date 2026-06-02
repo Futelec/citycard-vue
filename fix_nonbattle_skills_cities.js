@@ -1,6 +1,26 @@
 /**
- * 修复 nonBattleSkills.js 中的城市访问方式
- * 从数组方法改为对象方法
+ * Project: CityCard
+ * File: fix_nonbattle_skills_cities.js
+ * Description: 修复 nonBattleSkills.js 中的城市访问方式, 从数组方法改为对象方法
+ *
+ * Copyright (C) 2026 Futelec. All rights reserved for game assets.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * [SPECIAL NOTICE] The GPLv3 license applies ONLY to the source code of
+ * this file. All game assets (artwork, UI designs, sound, music, and lore)
+ * are EXCLUDED from GPLv3 and are strictly proprietary (All Rights Reserved).
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 import fs from 'fs'

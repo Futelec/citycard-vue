@@ -1,8 +1,30 @@
 #!/usr/bin/env python3
 """
+Project: CityCard
+File: fix_non_battle_dual_log.py
+Description:
 修正 nonBattleSkills.js 中的双日志格式
 1. 公开日志开头添加 ${caster.name}
 2. 私密日志中 '你' -> '${caster.name}'
+
+Copyright (C) 2026 Futelec. All rights reserved for game assets.
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+[SPECIAL NOTICE] The GPLv3 license applies ONLY to the source code of
+this file. All game assets (artwork, UI designs, sound, music, and lore)
+are EXCLUDED from GPLv3 and are strictly proprietary (All Rights Reserved).
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
 import re

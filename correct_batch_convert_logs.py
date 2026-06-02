@@ -1,9 +1,31 @@
 #!/usr/bin/env python3
 """
+Project: CityCard
+File: correct_batch_convert_logs.py
+Description:
 正确转换日志调用为双日志系统
 关键要求：
 1. 公开日志：保持原样，必须包含 ${caster.name}
 2. 私密日志：${caster.name}使用了XXX技能（不是"你使用了"）
+
+Copyright (C) 2026 Futelec. All rights reserved for game assets.
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+[SPECIAL NOTICE] The GPLv3 license applies ONLY to the source code of
+this file. All game assets (artwork, UI designs, sound, music, and lore)
+are EXCLUDED from GPLv3 and are strictly proprietary (All Rights Reserved).
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
 import re

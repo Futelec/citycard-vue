@@ -1,7 +1,27 @@
 #!/usr/bin/env node
 /**
- * 完整的城市索引到城市名称迁移脚本
- * 处理所有需要从数组索引迁移到城市名称的代码
+ * Project: CityCard
+ * File: migrate_all.js
+ * Description: 批量修复所有Vue组件中的 cities 数组访问
+ *
+ * Copyright (C) 2026 Futelec. All rights reserved for game assets.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * [SPECIAL NOTICE] The GPLv3 license applies ONLY to the source code of
+ * this file. All game assets (artwork, UI designs, sound, music, and lore)
+ * are EXCLUDED from GPLv3 and are strictly proprietary (All Rights Reserved).
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 import fs from 'fs';
