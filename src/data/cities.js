@@ -29,7 +29,7 @@ const DEFAULT_NAMES = ['Whale','CRH380BL-3562','Sirius North','猎奇凤爱莉']
       {name: '沧州市', hp: 4931},
       {name: '廊坊市', hp: 4041},
       {name: '衡水市', hp: 2012},
-      {name: '雄安新区', hp: 527}
+      {name: '雄安新区', hp: 542}
     ];
 
     const 山西省 = [

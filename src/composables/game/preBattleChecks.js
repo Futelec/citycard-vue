@@ -241,7 +241,7 @@ export function checkProvinceRules(gameStore, gameState, players) {
     }
     return {
       name: city.name,
-      province: city.province,
+      province: city.province || (PROVINCE_MAP[city.name] && PROVINCE_MAP[city.name].name) || '直辖市和特区',
       isCapital: city.isCapital || false,
       isProvincialCapital: city.isProvincialCapital || false,
       currentHp: city.currentHp,
@@ -258,7 +258,7 @@ export function checkProvinceRules(gameStore, gameState, players) {
     }
     return {
       name: city.name,
-      province: city.province,
+      province: city.province || (PROVINCE_MAP[city.name] && PROVINCE_MAP[city.name].name) || '直辖市和特区',
       isCapital: city.isCapital || false,
       isProvincialCapital: city.isProvincialCapital || false,
       currentHp: city.currentHp,

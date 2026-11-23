@@ -179,6 +179,8 @@ export const useGameStore = defineStore('game', () => {
    * 添加公共日志（所有玩家可见）
    * @param {string} message - 日志消息
    */
+  const MAX_LOG_ENTRIES = 500
+
   function addLog(message) {
     const timestamp = Date.now()
     logs.value.push({
@@ -187,6 +189,10 @@ export const useGameStore = defineStore('game', () => {
       round: currentRound.value,
       isPrivate: false
     })
+    // 限制日志条数，防止内存溢出
+    if (logs.value.length > MAX_LOG_ENTRIES) {
+      logs.value.splice(0, logs.value.length - MAX_LOG_ENTRIES)
+    }
   }
 
   /**
@@ -334,7 +340,27 @@ export const useGameStore = defineStore('game', () => {
 
   // 获取未使用的城市列表
   function getUnusedCities() {
-    return ALL_CITIES.filter(city => !usedCities.value.has(city.name))
+    // 收集所有玩家当前拥有的城市（包括存活和阵亡城市）和预备城市
+    const inPlayCities = new Set(usedCities.value)
+    players.value.forEach(player => {
+      if (player.cities) {
+        Object.keys(player.cities).forEach(cityName => inPlayCities.add(cityName))
+      }
+      if (player.roster && Array.isArray(player.roster)) {
+        player.roster.forEach(cityName => {
+          if (typeof cityName === 'string') inPlayCities.add(cityName)
+        })
+      }
+    })
+    // 也排除预备城市列表（roster reactive对象）
+    Object.values(roster).forEach(rosterList => {
+      if (Array.isArray(rosterList)) {
+        rosterList.forEach(cityName => {
+          if (typeof cityName === 'string') inPlayCities.add(cityName)
+        })
+      }
+    })
+    return ALL_CITIES.filter(city => !inPlayCities.has(city.name))
   }
 
   // 标记城市为已使用
@@ -645,7 +671,7 @@ export const useGameStore = defineStore('game', () => {
     const ownerKey = _prefixPlayer(playerName)
     // 遍历所有观察者
     for (const observer of Object.keys(knownCities)) {
-      if (!knownCities[observer][ownerKey]) continue
+      if (!knownCities[observer] || !knownCities[observer][ownerKey]) continue
       // 兼容处理：Firebase恢复后可能是Array而非Set
       if (Array.isArray(knownCities[observer][ownerKey])) {
         knownCities[observer][ownerKey] = new Set(knownCities[observer][ownerKey])
@@ -720,12 +746,11 @@ export const useGameStore = defineStore('game', () => {
     // 2. HP高于阵亡城市的原始HP
     // 3. 不是当前玩家已拥有的城市
     const originalHp = bbgsState.originalHp || city.hp
-    const playerCityNames = Object.keys(player.cities)
 
+    const unusedCityNames = new Set(getUnusedCities().map(c => c.name))
     const availableCities = provinceCities.filter(c => {
-      return !usedCities.value.has(c.name) &&  // 未被使用
-             c.hp > originalHp &&               // HP更高
-             !playerCityNames.includes(c.name)  // 不是已拥有的城市
+      return unusedCityNames.has(c.name) &&     // 未被使用（含所有玩家城市、预备城市）
+             c.hp > originalHp                  // HP更高
     })
 
     if (availableCities.length === 0) {
@@ -793,8 +818,13 @@ export const useGameStore = defineStore('game', () => {
    * @param {Object} player - 玩家对象
    */
   function checkCenterDeathAndPurpleChamberInheritance(player) {
+    // 如果玩家正在选择新中心城市（强制转移等技能触发），跳过自动淘汰检查
+    if (playerStates[player.name]?.needsNewCenter) {
+      return
+    }
+
     const centerName = player.centerCityName
-    const centerCity = centerName ? player.cities[centerName] : null
+    const centerCity = centerName && player.cities ? player.cities[centerName] : null
 
     // 中心城市未阵亡，无需处理（兼容 currentHp 和 hp 两种字段）
     const centerHp = centerCity ? (centerCity.currentHp !== undefined ? centerCity.currentHp : (centerCity.hp || 0)) : 0
@@ -804,7 +834,7 @@ export const useGameStore = defineStore('game', () => {
 
     // 检查生于紫室城市
     const chamberName = purpleChamber[player.name]
-    const chamberCity = chamberName ? player.cities[chamberName] : null
+    const chamberCity = chamberName && player.cities ? player.cities[chamberName] : null
     const chamberHp = chamberCity ? (chamberCity.currentHp !== undefined ? chamberCity.currentHp : (chamberCity.hp || 0)) : 0
     const hasPurpleChamber = chamberCity && chamberHp > 0 && chamberCity.isAlive !== false
 

@@ -42,8 +42,9 @@
           <button class="btn-accept" @click="handleAccept">
             放弃拦截
           </button>
-          <button class="btn-counter" @click="handleCounter">
+          <button class="btn-counter" :class="{ 'btn-disabled': !canAffordIntercept }" :disabled="!canAffordIntercept" @click="handleCounter">
             使用无懈可击（{{ intercept.interceptCost }}金币）
+            <span v-if="!canAffordIntercept" class="insufficient-hint">金币不足</span>
           </button>
         </div>
       </div>
@@ -114,7 +115,14 @@ function handleAccept() {
   emit('intercept-accepted', JSON.parse(JSON.stringify(gameStore.pendingIntercept)))
 }
 
+const canAffordIntercept = computed(() => {
+  return currentGold.value >= (intercept.value.interceptCost || 0)
+})
+
 function handleCounter() {
+  // 金币不足时不允许拦截
+  if (!canAffordIntercept.value) return
+
   if (timerInterval) {
     clearInterval(timerInterval)
     timerInterval = null
@@ -301,7 +309,23 @@ function handleCounter() {
   box-shadow: 0 4px 15px rgba(233, 69, 96, 0.4);
 }
 
-.btn-counter:hover {
+.btn-counter:hover:not(.btn-disabled) {
   box-shadow: 0 6px 20px rgba(233, 69, 96, 0.6);
+}
+
+.btn-counter.btn-disabled {
+  background: rgba(255, 255, 255, 0.1);
+  color: #666;
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.insufficient-hint {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: #ff6b6b;
+  margin-top: 2px;
 }
 </style>

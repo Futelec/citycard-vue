@@ -200,6 +200,11 @@ export function checkAndDeductGold(skillName, caster, gameStore) {
   // 扣除金币
   caster.gold -= actualCost
 
+  // 记录单回合金币花费（用于20金币上限检查）
+  if (gameStore.addRoundGoldSpent) {
+    gameStore.addRoundGoldSpent(caster.name, actualCost)
+  }
+
   // 如果使用了8金币及以上技能且有釜底抽薪标记，消耗标记
   if (baseCost >= 8 && gameStore.costIncrease && gameStore.costIncrease[caster.name]) {
     gameStore.addLog(`(釜底抽薪生效) ${caster.name} 使用高级技能，费用从${baseCost}增加到${actualCost}`)

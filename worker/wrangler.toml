@@ -1,0 +1,17 @@
+name = "firebase-auth-proxy"
+main = "auth-proxy-worker.js"
+compatibility_date = "2024-01-01"
+
+# 自定义域名（绕过 workers.dev 在中国大陆被封锁的问题）
+routes = [
+  { pattern = "auth.citycard.fun", custom_domain = true }
+]
+
+[vars]
+FIREBASE_SA_EMAIL = "firebase-adminsdk-fbsvc@city-card-game.iam.gserviceaccount.com"
+FIREBASE_DB_URL = "https://city-card-game-default-rtdb.asia-southeast1.firebasedatabase.app"
+EMAIL_FROM = "login@email.citycard.fun"
+
+# Secrets (通过 wrangler secret put 设置):
+# FIREBASE_SA_KEY  — Firebase 服务账号私钥 (PEM 格式，从 serviceAccountKey.json 的 private_key 字段获取)
+# RESEND_API_KEY   — Resend API Key

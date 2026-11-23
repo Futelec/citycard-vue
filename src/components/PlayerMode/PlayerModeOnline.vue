@@ -26,6 +26,7 @@
         @all-ready="handleAllReady"
         @player-joined="handlePlayerJoined"
         @reconnect-to-game="handleMidGameReconnect"
+        @back="handleExit"
       />
 
       <!-- 选择中心城市步骤 -->
@@ -193,7 +194,7 @@
 
     <!-- 求和请求面板 -->
     <DrawRequestPanel
-      v-if="currentPlayer && (currentStep === 'city-deployment' || currentStep === 'game')"
+      v-if="currentPlayer && (currentStep === 'city-deployment' || currentStep === 'game') && !bxdcShow"
       :current-player="currentPlayer"
       @draw-accepted="handleDrawAccepted"
       @draw-rejected="handleDrawRejected"
@@ -261,6 +262,9 @@
     <!-- 胜利/失败模态框 -->
     <div v-if="showVictory && gameLogic?.isGameOver?.value" class="victory-modal">
       <div class="victory-content">
+        <div v-if="sameIPDetected" class="same-ip-warning">
+          检测到对战双方为相同IP，本局游戏不计入场次
+        </div>
         <div class="victory-animation">
           <div class="trophy">{{ gameLogic.winner.value ? '🏆' : '🤝' }}</div>
         </div>
@@ -329,6 +333,8 @@ import { useGameLogic } from '../../composables/useGameLogic'
 import { useCityDraw } from '../../composables/useCityDraw'
 import { debugLog } from '../../utils/debug'
 import { useSession } from '../../composables/useSession'
+import { usePlayerStats } from '../../composables/usePlayerStats'
+import { useAuthStore } from '../../stores/authStore'
 import { addSkillUsageLog, addSkillEffectLog } from '../../composables/game/logUtils'
 import { SKILL_COSTS, getInterceptCost, getActualSkillCost } from '../../constants/skillCosts'
 import { CITY_QUESTIONS, hasCityQuestions } from '../../data/cityQuestions'
@@ -357,6 +363,44 @@ const { leaveRoom, getRoomData, saveRoomData, updateRoomGameState, startRoomList
 const gameLogic = useGameLogic()
 const { drawCities, getUsedNames } = useCityDraw()
 const { saveSession, loadSession, clearSession, setupBeforeUnloadPersistence } = useSession()
+const { recordOnlineGameEnd } = usePlayerStats()
+const authStore = useAuthStore()
+
+const sameIPDetected = ref(false)
+
+/**
+ * 检查房间内玩家是否为相同IP
+ */
+function checkSameIP(roomDataOrPlayers) {
+  try {
+    // 优先检查房间级别的 clientIPs
+    if (roomDataOrPlayers && roomDataOrPlayers.clientIPs) {
+      const ips = Object.values(roomDataOrPlayers.clientIPs).filter(ip => ip && ip.length > 0)
+      if (ips.length >= 2) {
+        const allSame = ips.every(ip => ip === ips[0])
+        debugLog('[checkSameIP] 房间级别IP检查:', ips, '相同:', allSame)
+        return allSame
+      }
+    }
+
+    // 回退：检查玩家级别的 clientIP
+    let players = roomDataOrPlayers?.players || roomDataOrPlayers
+    if (!players) return false
+    if (!Array.isArray(players)) {
+      players = Object.values(players)
+    }
+    const ips = players.filter(p => p && p.clientIP).map(p => p.clientIP)
+    if (ips.length >= 2) {
+      const allSame = ips.every(ip => ip === ips[0])
+      debugLog('[checkSameIP] 玩家级别IP检查:', ips, '相同:', allSame)
+      return allSame
+    }
+    return false
+  } catch (e) {
+    console.warn('[checkSameIP] 检查失败:', e)
+    return false
+  }
+}
 
 // 步骤: firebase-config, room-selection, waiting-room, center-city-selection, game
 const currentStep = ref('firebase-config')
@@ -1085,6 +1129,7 @@ async function handleExit() {
   if (await showConfirm('确定要退出到主菜单吗？当前数据可能会丢失。', { title: '退出游戏', icon: '🚪' })) {
     // Clear saved session
     clearSession()
+    sameIPDetected.value = false
 
     // 停止监听
     if (roomDataListener) {
@@ -1128,8 +1173,22 @@ async function handleSurrender() {
   await saveRoomData(currentRoomId.value, roomData)
   debugLog(`[认输] ${myName} 认输，${opponent.name} 获胜`)
 
+  // 记录战绩（相同IP则跳过）
+  if (checkSameIP(roomData)) {
+    sameIPDetected.value = true
+    debugLog('[认输] 相同IP，不记录战绩')
+  } else {
+    const playersArr = Array.isArray(roomData.players) ? roomData.players : Object.values(roomData.players || {})
+    const winnerUid = playersArr.find(p => p.name === opponent.name)?.firebaseUid
+    const loserUid = playersArr.find(p => p.name === myName)?.firebaseUid
+    if (winnerUid && loserUid) {
+      recordOnlineGameEnd(winnerUid, loserUid)
+    }
+  }
+
   // 设置本地游戏结束状态
-  const winnerPlayer = roomData.players.find(p => p.name === opponent.name)
+  const playersForFind = Array.isArray(roomData.players) ? roomData.players : Object.values(roomData.players || {})
+  const winnerPlayer = playersForFind.find(p => p.name === opponent.name)
   gameLogic.winner.value = winnerPlayer ? JSON.parse(JSON.stringify(winnerPlayer)) : null
   gameLogic.isGameOver.value = true
   showVictory.value = true
@@ -1443,7 +1502,7 @@ async function handleSkillSelected(skillData) {
       if (!canTargetUseLiDai && !canTargetUseWuXie) {
         // B既不能用李代桃僵也不能用无懈可击 → 直接执行交换
         debugLog('[PlayerMode] 对手无法响应，直接执行交换')
-        const nonBattleSkills = await import('../../composables/skills/nonBattleSkills.js')
+        const nonBattleSkills = await import('../../composables/skills/nonBattleSkills')
         let result
         if (skillData.skillName === '时来运转') {
           result = nonBattleSkills.useNonBattleSkills().executeFortuneSwap(
@@ -1629,7 +1688,7 @@ async function handleSkillSelected(skillData) {
         Object.keys(gameStore.bannedSkills).forEach(k => delete gameStore.bannedSkills[k])
         Object.assign(gameStore.bannedSkills, JSON.parse(JSON.stringify(skillData.bannedSkillsSnapshot)))
       }
-      const nbsMod = await import('../../composables/skills/nonBattleSkills.js')
+      const nbsMod = await import('../../composables/skills/nonBattleSkills')
       const casterPlayer = gameStore.players.find(p => p.name === currentPlayer.value.name)
       nbsMod.useNonBattleSkills().executeBoXueDuoCai(casterPlayer, skillData.selfCityName, correctCount, { skipGold: true })
       // 重新生成快照，包含答题后的HP变化（此时gameStore.players已有正确的金币和HP）
@@ -1704,6 +1763,8 @@ async function handleSkillSelected(skillData) {
         playerUpdates[`rooms/${currentRoomId.value}/players/${idx}/cities`] = citiesForFirebase
         // 更新金币
         playerUpdates[`rooms/${currentRoomId.value}/players/${idx}/gold`] = player.gold
+        // 疲劳计数随城市转移同步（防止技能换城后少算一轮疲劳）
+        playerUpdates[`rooms/${currentRoomId.value}/players/${idx}/streaks`] = { ...(player.streaks || {}) }
         // 更新中心城市（点石成金等技能可能更改）
         if (player.centerCityName !== undefined) {
           playerUpdates[`rooms/${currentRoomId.value}/players/${idx}/centerCityName`] = player.centerCityName
@@ -1756,7 +1817,7 @@ async function handleSkillSelected(skillData) {
         const knownCitiesForFirebase = {}
         Object.keys(gameStore.knownCities).forEach(observer => {
           knownCitiesForFirebase[observer] = {}
-          Object.keys(gameStore.knownCities[observer]).forEach(owner => {
+          Object.keys(gameStore.knownCities[observer] || {}).forEach(owner => {
             const cities = gameStore.knownCities[observer][owner]
             knownCitiesForFirebase[observer][owner] = cities instanceof Set ? Array.from(cities) : (Array.isArray(cities) ? cities : [])
           })
@@ -1989,8 +2050,8 @@ async function handleSkillSelected(skillData) {
   }
 
   // 动态导入技能模块
-  const battleSkills = await import('../../composables/skills/battleSkills.js')
-  const nonBattleSkills = await import('../../composables/skills/nonBattleSkills.js')
+  const battleSkills = await import('../../composables/skills/battleSkills')
+  const nonBattleSkills = await import('../../composables/skills/nonBattleSkills')
 
   // 根据技能名称调用对应的执行函数
   let result = null
@@ -2175,6 +2236,8 @@ async function handleSkillSelected(skillData) {
           playerUpdates[`rooms/${currentRoomId.value}/players/${idx}/cities`] = citiesForFirebase
           // 更新金币
           playerUpdates[`rooms/${currentRoomId.value}/players/${idx}/gold`] = gameStorePlayer.gold
+          // 疲劳计数随城市转移同步
+          playerUpdates[`rooms/${currentRoomId.value}/players/${idx}/streaks`] = { ...(gameStorePlayer.streaks || {}) }
         }
       })
 
@@ -2619,7 +2682,7 @@ async function executeFortuneSwapResult(swapData) {
 
   waitingForFortuneSwap.value = false
 
-  const nonBattleSkills = await import('../../composables/skills/nonBattleSkills.js')
+  const nonBattleSkills = await import('../../composables/skills/nonBattleSkills')
 
   let result = null
   if (swapData.status === 'accepted') {
@@ -2709,6 +2772,8 @@ async function executeFortuneSwapResult(swapData) {
       })
       playerUpdates[`rooms/${currentRoomId.value}/players/${idx}/cities`] = citiesForFirebase
       playerUpdates[`rooms/${currentRoomId.value}/players/${idx}/gold`] = player.gold
+      // 疲劳计数必须随城市一起转移，否则被交换城市会少算一轮疲劳
+      playerUpdates[`rooms/${currentRoomId.value}/players/${idx}/streaks`] = { ...(player.streaks || {}) }
     })
 
     playerUpdates[`rooms/${currentRoomId.value}/gameState/pendingFortuneSwap`] = null
@@ -2846,8 +2911,8 @@ async function executePendingSkill(interceptData) {
   const { skillName, targetCityName, selfCityName, selectedSelfCities, amount } = skillData
 
   // 动态导入技能模块
-  const battleSkills = await import('../../composables/skills/battleSkills.js')
-  const nonBattleSkills = await import('../../composables/skills/nonBattleSkills.js')
+  const battleSkills = await import('../../composables/skills/battleSkills')
+  const nonBattleSkills = await import('../../composables/skills/nonBattleSkills')
 
   // 战斗金币技能映射
   const battleSkillMap = {
@@ -3047,6 +3112,8 @@ async function executePendingSkill(interceptData) {
       })
       playerUpdates[`rooms/${currentRoomId.value}/players/${idx}/cities`] = citiesForFirebase
       playerUpdates[`rooms/${currentRoomId.value}/players/${idx}/gold`] = player.gold
+      // 疲劳计数随城市转移同步
+      playerUpdates[`rooms/${currentRoomId.value}/players/${idx}/streaks`] = { ...(player.streaks || {}) }
       if (player.centerCityName !== undefined) {
         playerUpdates[`rooms/${currentRoomId.value}/players/${idx}/centerCityName`] = player.centerCityName
       }
@@ -3844,9 +3911,12 @@ function syncRoomDataToGameStore(roomData) {
       // 优先使用roomData中的currentHp（战斗后已更新）
       let currentHp = city.currentHp !== undefined ? city.currentHp : city.hp
       let isAlive = city.isAlive !== undefined ? city.isAlive : (currentHp > 0)
+      // 修复历史数据：部分城市（如港澳）可能缺少province，从城市表补齐
+      const province = city.province || (PROVINCE_MAP[city.name] && PROVINCE_MAP[city.name].name) || '直辖市和特区'
 
       cities[cityName] = {
         ...city,
+        province,
         currentHp: currentHp,
         isAlive: isAlive
       }
@@ -4016,12 +4086,16 @@ function syncRoomDataToGameStore(roomData) {
       debugLog('[PlayerMode] syncRoomDataToGameStore - 同步electromagnetic:', JSON.stringify(gameStore.electromagnetic))
     }
 
-    // 同步屏障状态
+    // 同步屏障状态（战斗处理期间跳过，防止Firebase旧数据覆盖战斗中已扣减的屏障HP）
     if (roomData.gameState.barrier) {
-      Object.keys(roomData.gameState.barrier).forEach(playerName => {
-        gameStore.barrier[playerName] = roomData.gameState.barrier[playerName]
-      })
-      debugLog('[PlayerMode] syncRoomDataToGameStore - 同步barrier:', JSON.stringify(gameStore.barrier))
+      if (isBattleProcessing.value) {
+        debugLog('[PlayerMode] syncRoomDataToGameStore - 战斗中，跳过barrier同步以保留战斗扣减结果')
+      } else {
+        Object.keys(roomData.gameState.barrier).forEach(playerName => {
+          gameStore.barrier[playerName] = roomData.gameState.barrier[playerName]
+        })
+        debugLog('[PlayerMode] syncRoomDataToGameStore - 同步barrier:', JSON.stringify(gameStore.barrier))
+      }
     }
 
     // 同步bannedCities状态
@@ -4258,8 +4332,25 @@ function startRoomDataListener() {
     // 确保第二个玩家（非战斗处理方）也能看到胜利/失败画面
     if (data.gameState?.gameOver && !showVictory.value) {
       debugLog('[PlayerMode] 监听器顶层检测到游戏结束，获胜者:', data.gameState.winner)
+      // 相同IP检查
+      if (checkSameIP(data)) {
+        sameIPDetected.value = true
+        debugLog('[监听器] 相同IP，不记录战绩')
+      } else {
+        const winnerName = data.gameState.winner
+        if (winnerName && winnerName !== '平局') {
+          const playersArr = Array.isArray(data.players) ? data.players : Object.values(data.players || {})
+          const loserName = playersArr.find(p => p.name !== winnerName)?.name
+          const winnerUid = playersArr.find(p => p.name === winnerName)?.firebaseUid
+          const loserUid = playersArr.find(p => p.name === loserName)?.firebaseUid
+          if (winnerUid && loserUid) {
+            recordOnlineGameEnd(winnerUid, loserUid)
+          }
+        }
+      }
       // 同步最终的城市数据到currentPlayer（确保结算画面显示正确HP）
-      const finalPlayerData = data.players?.find(p => p.name === currentPlayer.value?.name)
+      const finalPlayersArr = Array.isArray(data.players) ? data.players : Object.values(data.players || {})
+      const finalPlayerData = finalPlayersArr.find(p => p.name === currentPlayer.value?.name)
       if (finalPlayerData) {
         currentPlayer.value = JSON.parse(JSON.stringify(finalPlayerData))
       }
@@ -4267,7 +4358,7 @@ function startRoomDataListener() {
       if (gameLogic && !gameLogic.isGameOver?.value) {
         const winnerName = data.gameState.winner
         if (winnerName && winnerName !== '平局') {
-          const winnerPlayer = data.players?.find(p => p.name === winnerName)
+          const winnerPlayer = finalPlayersArr.find(p => p.name === winnerName)
           gameLogic.winner.value = winnerPlayer ? JSON.parse(JSON.stringify(winnerPlayer)) : null
         } else {
           gameLogic.winner.value = null  // null = draw
@@ -5245,7 +5336,7 @@ async function processBattle(roomData) {
     if (!roomData.gameState.knownCities[observer]) {
       roomData.gameState.knownCities[observer] = {}
     }
-    Object.keys(gameStore.knownCities[observer]).forEach(owner => {
+    Object.keys(gameStore.knownCities[observer] || {}).forEach(owner => {
       roomData.gameState.knownCities[observer][owner] = [...gameStore.knownCities[observer][owner]]
       debugLog(`[PlayerMode] 预先同步knownCities: knownCities[${observer}][${owner}] = [${roomData.gameState.knownCities[observer][owner].join(', ')}]`)
     })
@@ -5494,7 +5585,7 @@ async function processBattle(roomData) {
     if (!roomData.gameState.knownCities[observer]) {
       roomData.gameState.knownCities[observer] = {}
     }
-    Object.keys(gameStore.knownCities[observer]).forEach(owner => {
+    Object.keys(gameStore.knownCities[observer] || {}).forEach(owner => {
       // gameStore存储的是Set，Firebase需要数组
       const cities = gameStore.knownCities[observer][owner]
       roomData.gameState.knownCities[observer][owner] = Array.from(cities instanceof Set ? cities : [])
@@ -5702,6 +5793,20 @@ async function processBattle(roomData) {
   // 检查游戏是否结束（必须在同步 isAlive 状态之后）
   if (gameLogic.isGameOver.value) {
     debugLog('[PlayerMode] 游戏结束')
+    // 记录战绩（相同IP则跳过）
+    if (checkSameIP(roomData)) {
+      sameIPDetected.value = true
+      debugLog('[processBattle] 相同IP，不记录战绩')
+    } else {
+      const winner = gameLogic.winner.value
+      const playersArr = Array.isArray(roomData.players) ? roomData.players : Object.values(roomData.players || {})
+      if (winner) {
+        const loser = playersArr.find(p => p.name !== winner.name)
+        if (winner.firebaseUid && loser?.firebaseUid) {
+          recordOnlineGameEnd(winner.firebaseUid, loser.firebaseUid)
+        }
+      }
+    }
     // 保存游戏结束状态到Firebase
     roomData.gameState.gameOver = true
     roomData.gameState.winner = gameLogic.winner.value?.name || '平局'
@@ -5964,6 +6069,7 @@ async function processBattle(roomData) {
 function restartGame() {
   debugLog('[PlayerMode] 重新开始游戏')
   clearSession()
+  sameIPDetected.value = false
 
   // 重置游戏结束状态
   showVictory.value = false
@@ -6106,6 +6212,17 @@ function restartGame() {
   width: 90%;
   text-align: center;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+
+.same-ip-warning {
+  background: rgba(255, 193, 7, 0.15);
+  border: 1px solid rgba(255, 193, 7, 0.4);
+  color: #ffc107;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  text-align: center;
+  margin-bottom: 12px;
 }
 
 .victory-animation {

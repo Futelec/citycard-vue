@@ -5,7 +5,14 @@
       <div class="selection-title">
         <h1 class="title-text">{{ is3P ? '确认抽取到的城市' : '选择中心城市' }}</h1>
         <p class="subtitle">{{ is3P ? 'Confirm Your Cities' : 'Choose Your Capital City' }}</p>
-        <div class="player-name">玩家: {{ playerName }}</div>
+        <div class="player-name">
+          <span v-if="authStore.avatar && authStore.avatar.startsWith('data:')" class="player-avatar img">
+            <img :src="authStore.avatar" alt="avatar" />
+          </span>
+          <span v-else-if="authStore.avatar" class="player-avatar emoji">{{ authStore.avatar }}</span>
+          <span v-else class="player-avatar initial">{{ playerName.charAt(0) }}</span>
+          玩家: {{ playerName }}
+        </div>
       </div>
 
       <!-- 抽取信息 -->
@@ -131,11 +138,14 @@
 
 <script setup>
 import { ref, computed } from 'vue'
+import { useAuthStore } from '../../stores/authStore'
 import { useNotification } from '../../composables/useNotification'
 import { useDialog } from '../../composables/useDialog'
 import { getCitySkill, SKILL_TYPE } from '../../data/citySkills'
 import { PROVINCE_MAP } from '../../data/cities'
 import { debugLog } from '../../utils/debug'
+
+const authStore = useAuthStore()
 
 const props = defineProps({
   playerName: {
@@ -356,6 +366,45 @@ function getSkillCategoryLabel(category) {
   color: rgba(255, 255, 255, 0.45);
   margin-top: 12px;
   font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.player-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.player-avatar.initial {
+  background: linear-gradient(135deg, #d4a017, #b8860b);
+  font-size: 14px;
+  font-weight: 700;
+  color: white;
+}
+
+.player-avatar.emoji {
+  font-size: 22px;
+  background: none;
+  width: auto;
+  height: auto;
+}
+
+.player-avatar.img {
+  background: none;
+}
+
+.player-avatar.img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 @keyframes fadeInDown {

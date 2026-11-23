@@ -37,6 +37,9 @@ defineProps({
 const emit = defineEmits(['update:modelValue'])
 
 const changelog = [
+  { date: '2026.7.13', version: 'V1.1.0', desc: '账号系统正式上线' },
+  { date: '2026.6.19', version: 'V1.0.14', desc: '更新部分省份题库和题库的目录功能' },
+  { date: '2026.6.6', version: 'V1.0.13', desc: '修改部分画面渲染和卡顿问题' },
   { date: '2026.5.24', version: 'V1.0.12', desc: '修复了一些bug' },
   { date: '2026.5.18', version: 'V1.0.11', desc: '更新了金币技能苟延残喘和以礼来降' },
   { date: '2026.5.16', version: 'V1.0.10', desc: '更新了金币技能无懈可击、时来运转、人质交换和李代桃僵' },

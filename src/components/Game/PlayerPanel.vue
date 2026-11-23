@@ -3,7 +3,8 @@
     <!-- 玩家头部信息 -->
     <div class="player-panel__header">
       <div class="player-panel__avatar">
-        {{ player.name.charAt(0) }}
+        <img v-if="player.avatar && player.avatar.startsWith('data:')" :src="player.avatar" alt="avatar" />
+        <template v-else>{{ player.avatar || player.name.charAt(0) }}</template>
       </div>
       <div class="player-panel__info">
         <h3 class="player-panel__name">
@@ -515,6 +516,13 @@ function closeOpponentCitySelector() {
   color: white;
   text-transform: uppercase;
   box-shadow: 0 4px 8px rgba(100, 116, 145, 0.08);
+  overflow: hidden;
+}
+
+.player-panel__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .player-panel__info {

@@ -51,6 +51,7 @@ export function applyFatigueReduction(gameStore, gameState, players, mode) {
       deployedCities = battleCities.map(card => card.cityName)
     }
 
+    if (!player.streaks) player.streaks = {}
     debugLog(`[疲劳系统] ===== ${player.name} 疲劳检查开始 =====`)
     debugLog(`[疲劳系统] ${player.name} 本轮出战城市名称:`, deployedCities)
     debugLog(`[疲劳系统] ${player.name} 当前所有streaks:`, JSON.stringify(player.streaks, null, 2))

@@ -10,43 +10,60 @@
       </div>
 
       <div class="modal-body">
-        <!-- 开始刷题 / 模拟演练 按钮 -->
-        <div class="quiz-start-section">
-          <div class="quiz-buttons-row">
-            <button class="quiz-start-btn" @click="startQuiz">
-              🎯 开始刷题
-            </button>
-            <button class="drill-start-btn" @click="startDrillSelection">
-              📝 模拟演练
-            </button>
-          </div>
-          <div class="quiz-hint">
-            刷题：随机抽取10道题（普通+进阶8道，挑战2道），每题15秒，满分100分
-          </div>
-          <div class="quiz-hint">
-            演练：选择城市，依次回答简单/进阶/挑战3道题，无时间限制
+        <!-- 左侧目录 -->
+        <div class="toc-sidebar">
+          <div class="toc-title">目录</div>
+          <div
+            v-for="cityName in cityNames"
+            :key="'toc-' + cityName"
+            class="toc-item"
+            :class="{ active: activeTocCity === cityName }"
+            @click="scrollToCity(cityName)"
+          >
+            {{ cityName }}
           </div>
         </div>
 
-        <!-- 题库列表 -->
-        <div v-for="cityName in cityNames" :key="cityName">
-          <h3 class="city-title">{{ cityName }}题目</h3>
-          <div class="questions-section">
-            <div
-              v-for="(question, index) in getCityAllQuestions(cityName)"
-              :key="`${cityName}-${index}`"
-              class="question-card"
-            >
-              <div class="question-header">
-                {{ index + 1 }}. {{ question.question }}
-              </div>
-              <div class="question-options">
-                <div v-for="option in question.options" :key="option">
-                  {{ option }}
+        <!-- 右侧内容 -->
+        <div class="modal-body-content" ref="bodyContentRef">
+          <!-- 开始刷题 / 模拟演练 按钮 -->
+          <div class="quiz-start-section">
+            <div class="quiz-buttons-row">
+              <button class="quiz-start-btn" @click="startQuiz">
+                🎯 开始刷题
+              </button>
+              <button class="drill-start-btn" @click="startDrillSelection">
+                📝 模拟演练
+              </button>
+            </div>
+            <div class="quiz-hint">
+              刷题：随机抽取10道题（普通+进阶8道，挑战2道），每题15秒，满分100分
+            </div>
+            <div class="quiz-hint">
+              演练：选择城市，依次回答简单/进阶/挑战3道题，无时间限制
+            </div>
+          </div>
+
+          <!-- 题库列表 -->
+          <div v-for="cityName in cityNames" :key="cityName" :ref="el => setCityRef(cityName, el)">
+            <h3 class="city-title">{{ cityName }}题目</h3>
+            <div class="questions-section">
+              <div
+                v-for="(question, index) in getCityAllQuestions(cityName)"
+                :key="`${cityName}-${index}`"
+                class="question-card"
+              >
+                <div class="question-header">
+                  {{ index + 1 }}. {{ question.question }}
                 </div>
-              </div>
-              <div class="question-answer">
-                答案：{{ question.answer }}
+                <div class="question-options">
+                  <div v-for="option in question.options" :key="option">
+                    {{ option }}
+                  </div>
+                </div>
+                <div class="question-answer">
+                  答案：{{ question.answer }}
+                </div>
               </div>
             </div>
           </div>
@@ -290,6 +307,23 @@ const emit = defineEmits(['update:modelValue'])
 const cityNames = computed(() => {
   return Object.keys(CITY_QUESTIONS).filter(city => city !== 'DEFAULT')
 })
+
+// 目录导航
+const bodyContentRef = ref(null)
+const activeTocCity = ref(null)
+const cityRefs = {}
+
+function setCityRef(cityName, el) {
+  if (el) cityRefs[cityName] = el
+}
+
+function scrollToCity(cityName) {
+  const el = cityRefs[cityName]
+  if (el && bodyContentRef.value) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    activeTocCity.value = cityName
+  }
+}
 
 // 刷题状态
 const quizActive = ref(false)
@@ -672,7 +706,7 @@ onBeforeUnmount(() => {
 .modal-content {
   background: white;
   margin: 20px;
-  max-width: 900px;
+  max-width: 1050px;
   width: 100%;
   border-radius: 8px;
   box-shadow: 0 4px 6px rgba(100, 116, 145, 0.12);
@@ -713,9 +747,53 @@ onBeforeUnmount(() => {
 }
 
 .modal-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.toc-sidebar {
+  width: 150px;
+  min-width: 150px;
+  border-right: 1px solid #e2e8f0;
+  padding: 16px 0;
+  overflow-y: auto;
+}
+
+.toc-title {
+  font-weight: bold;
+  color: #333;
+  padding: 0 16px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 8px;
+  font-size: 16px;
+}
+
+.toc-item {
+  padding: 10px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #555;
+  border-left: 3px solid transparent;
+  transition: all 0.2s;
+}
+
+.toc-item:hover {
+  background: #f5f5f5;
+  color: #1976d2;
+}
+
+.toc-item.active {
+  background: #e3f2fd;
+  color: #1976d2;
+  font-weight: bold;
+  border-left-color: #1976d2;
+}
+
+.modal-body-content {
+  flex: 1;
   padding: 20px;
   overflow-y: auto;
-  flex: 1;
 }
 
 .quiz-start-section {
@@ -1076,6 +1154,8 @@ onBeforeUnmount(() => {
   border-radius: 8px;
   padding: 30px;
   text-align: center;
+  max-height: 80vh;
+  overflow-y: auto;
 }
 
 .city-select-title {
@@ -1240,5 +1320,12 @@ onBeforeUnmount(() => {
   font-weight: bold;
   color: #333;
   margin-bottom: 24px;
+}
+
+/* 移动端适配：隐藏目录侧栏 */
+@media (max-width: 768px) {
+  .toc-sidebar {
+    display: none;
+  }
 }
 </style>

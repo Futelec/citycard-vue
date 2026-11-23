@@ -6,7 +6,7 @@ import { debugLog } from '../utils/debug'
 // 重要：这是一个示例配置，请替换为你自己的 Firebase 项目配置
 const DEFAULT_FIREBASE_CONFIG = {
   apiKey: "AIzaSyBpBcdlKxzT0lV7HlRUWBHSRCSF1UkEkJc",
-  authDomain: "city-card-game.firebaseapp.com",
+  authDomain: "auth.citycard.fun",
   databaseURL: "https://city-card-game-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "city-card-game",
   storageBucket: "city-card-game.firebasestorage.app",
@@ -97,6 +97,12 @@ export function initializeFirebase(config = null) {
  * 优先使用保存的配置，其次使用默认配置
  */
 export function autoInitFirebase() {
+  // 已初始化则跳过，防止多处调用导致 deleteApp 破坏现有 auth listener
+  if (isInitialized && firebaseApp) {
+    debugLog('[Firebase] 已初始化，跳过重复初始化')
+    return true
+  }
+
   debugLog('[Firebase] 自动初始化检查...')
 
   // 优先使用保存的配置

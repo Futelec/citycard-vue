@@ -428,11 +428,45 @@ export function useGameLogic() {
 
     // 14. 厚积薄发倒计时
     if (gameStore.hjbf && gameStore.hjbf[player.name]) {
-      gameStore.hjbf[player.name].roundsLeft--
-      if (gameStore.hjbf[player.name].roundsLeft <= 0) {
-        // 释放蓄积的能量
-        const power = gameStore.hjbf[player.name].accumulatedPower || 1
-        // 这里可以应用到下次战斗
+      const hjbfCityNames = Object.keys(gameStore.hjbf[player.name])
+      for (const cityName of hjbfCityNames) {
+        const hjbfData = gameStore.hjbf[player.name][cityName]
+        if (!hjbfData) continue
+
+        hjbfData.roundsLeft--
+
+        if (hjbfData.roundsLeft <= 0) {
+          // 5回合到期，初始HP和当前HP都×5
+          const city = player.cities[cityName]
+          if (city && city.isAlive) {
+            const originalHp = hjbfData.originalHp
+            const maxHp = originalHp < 30000 ? 80000 : 100000
+
+            // 初始HP×5（基于激活时的原始HP）
+            const newBaseHp = Math.min(originalHp * 5, maxHp)
+            // 当前HP×5
+            const currentHp = city.currentHp !== undefined ? city.currentHp : city.hp
+            const newCurrentHp = Math.min(currentHp * 5, maxHp)
+
+            city.hp = newBaseHp
+            city.currentHp = newCurrentHp
+
+            // 同步更新initialCities记录
+            if (gameStore.initialCities?.[player.name]?.[cityName]) {
+              gameStore.initialCities[player.name][cityName].hp = newBaseHp
+            }
+
+            gameStore.addLog(`(厚积薄发) ${player.name} 的 ${cityName} 厚积薄发完成，初始HP: ${Math.floor(originalHp)}→${Math.floor(newBaseHp)}，当前HP: ${Math.floor(currentHp)}→${Math.floor(newCurrentHp)}，攻击力恢复正常`)
+          }
+
+          delete gameStore.hjbf[player.name][cityName]
+        } else {
+          gameStore.addLog(`(厚积薄发) ${player.name} 的 ${cityName} 厚积薄发剩余${hjbfData.roundsLeft}回合`)
+        }
+      }
+
+      // 清理空对象
+      if (Object.keys(gameStore.hjbf[player.name]).length === 0) {
         delete gameStore.hjbf[player.name]
       }
     }

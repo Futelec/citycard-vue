@@ -14,11 +14,15 @@
         >邮箱登录</button>
         <button
           :class="['tab-btn', { active: authMethod === 'phone' }]"
-          @click="authMethod = 'phone'"
+          @click="handlePhoneTabClick"
         >手机号登录</button>
+        <button
+          :class="['tab-btn', { active: authMethod === 'guest' }]"
+          @click="authMethod = 'guest'"
+        >昵称登录</button>
       </div>
 
-      <!-- Email login form -->
+      <!-- Email login form (verification code) -->
       <div v-if="authMethod === 'email'" class="form-section">
         <div class="form-group">
           <label class="form-label">邮箱地址</label>
@@ -27,85 +31,80 @@
             type="email"
             class="form-input"
             placeholder="请输入邮箱"
-            @keyup.enter="handleEmailLogin"
+          />
+        </div>
+
+        <button
+          v-if="!emailLoginCodeSent"
+          class="sms-btn"
+          :disabled="emailLoginCodeSending || emailLoginCountdown > 0"
+          @click="handleSendEmailLoginCode"
+        >
+          {{ emailLoginCountdown > 0 ? `${emailLoginCountdown}秒后重发` : (emailLoginCodeSending ? '发送中...' : '获取验证码') }}
+        </button>
+
+        <div v-if="emailLoginCodeSent" class="form-group">
+          <label class="form-label">验证码</label>
+          <input
+            v-model="emailLoginCode"
+            type="text"
+            class="form-input"
+            placeholder="请输入6位验证码"
+            maxlength="6"
+            @keyup.enter="handleEmailCodeLogin"
+          />
+        </div>
+
+        <button
+          v-if="emailLoginCodeSent"
+          class="auth-btn"
+          :disabled="loading"
+          @click="handleEmailCodeLogin"
+        >
+          {{ loading ? '验证中...' : '验证并登录' }}
+        </button>
+      </div>
+
+      <!-- Phone login form (暂未上线) -->
+      <div v-if="authMethod === 'phone'" class="form-section">
+        <div class="message error" style="margin-top: 0;">
+          手机号登录功能暂未上线，敬请谅解。请使用邮箱登录或昵称登录。
+        </div>
+      </div>
+
+      <!-- Guest login form -->
+      <div v-if="authMethod === 'guest'" class="form-section">
+        <div class="form-group">
+          <label class="form-label">昵称</label>
+          <input
+            v-model="guestNickname"
+            type="text"
+            class="form-input"
+            placeholder="请输入昵称"
+            maxlength="20"
+            @keyup.enter="handleGuestLogin"
           />
         </div>
         <div class="form-group">
           <label class="form-label">密码</label>
           <input
-            v-model="password"
+            v-model="guestPassword"
             type="password"
             class="form-input"
             placeholder="请输入密码"
-            @keyup.enter="handleEmailLogin"
+            @keyup.enter="handleGuestLogin"
           />
         </div>
-        <button class="auth-btn" :disabled="loading" @click="handleEmailLogin">
-          {{ loading ? '登录中...' : '登录' }}
-        </button>
-        <button class="link-btn" @click="handleResetPassword">忘记密码？</button>
-      </div>
-
-      <!-- Phone login form -->
-      <div v-if="authMethod === 'phone'" class="form-section">
-        <div class="form-group">
-          <label class="form-label">手机号码</label>
-          <div class="phone-input">
-            <select v-model="countryCode" class="country-code-select">
-              <option value="+86">+86 中国</option>
-              <option value="+1">+1 美国/加拿大</option>
-              <option value="+44">+44 英国</option>
-              <option value="+81">+81 日本</option>
-              <option value="+82">+82 韩国</option>
-              <option value="+852">+852 香港</option>
-              <option value="+853">+853 澳门</option>
-              <option value="+886">+886 台湾</option>
-              <option value="+65">+65 新加坡</option>
-              <option value="+60">+60 马来西亚</option>
-            </select>
-            <input
-              v-model="phoneNumber"
-              type="tel"
-              class="form-input"
-              placeholder="请输入手机号"
-            />
-          </div>
-        </div>
-
-        <button
-          v-if="!smsCodeSent"
-          class="sms-btn"
-          :disabled="loading || countdown > 0"
-          @click="handleSendSms"
-        >
-          {{ countdown > 0 ? `${countdown}秒后重发` : '获取验证码' }}
-        </button>
-
-        <div v-if="smsCodeSent" class="form-group">
-          <label class="form-label">验证码</label>
-          <input
-            v-model="smsCode"
-            type="text"
-            class="form-input"
-            placeholder="请输入6位验证码"
-            maxlength="6"
-            @keyup.enter="handlePhoneLogin"
-          />
-        </div>
-
-        <button
-          v-if="smsCodeSent"
-          class="auth-btn"
-          :disabled="loading"
-          @click="handlePhoneLogin"
-        >
-          {{ loading ? '验证中...' : '验证并登录' }}
+        <button class="auth-btn" :disabled="guestLoading" @click="handleGuestLogin">
+          {{ guestLoading ? '登录中...' : '登录' }}
         </button>
       </div>
 
       <!-- Error/success messages -->
       <div v-if="errorMsg" class="message error">{{ errorMsg }}</div>
       <div v-if="successMsg" class="message success">{{ successMsg }}</div>
+
+
 
       <!-- Navigation links -->
       <div class="auth-links">
@@ -130,7 +129,10 @@
           maxlength="20"
           @keyup.enter="handleSetNickname"
         />
-        <button class="auth-btn" :disabled="!nickname.trim() || nickname.trim().length < 2" @click="handleSetNickname">
+        <span v-if="nicknameChecking" class="nickname-status checking">检查中...</span>
+        <span v-else-if="nickname.trim().length >= 2 && nicknameAvailable === true" class="nickname-status available">昵称可用 ✓</span>
+        <span v-else-if="nickname.trim().length >= 2 && nicknameAvailable === false" class="nickname-status taken">该昵称已被使用</span>
+        <button class="auth-btn" :disabled="!nickname.trim() || nickname.trim().length < 2 || nicknameAvailable !== true" @click="handleSetNickname">
           确认
         </button>
       </div>
@@ -139,16 +141,39 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, watch, onMounted, computed } from 'vue'
 import { useAuthFunctions } from '../../composables/useAuth'
+import { autoInitFirebase, isFirebaseReady } from '../../composables/useFirebase'
+import { isNicknameTaken } from '../../composables/useUserDB'
+import {
+  isAuthProxyEnabled,
+  loadAuthProxyUrl,
+  saveAuthProxyUrl,
+  enableAuthProxy,
+  disableAuthProxy,
+  testAuthProxy
+} from '../../composables/useAuthProxy'
+
+const proxyEnabled = computed(() => isAuthProxyEnabled())
 
 const emit = defineEmits(['navigate', 'back'])
 
-const { loginWithEmail, resetPassword, sendPhoneSmsCode, confirmPhoneSmsCode, updateDisplayName } = useAuthFunctions()
+// 进入登录页面时确保 Firebase 已初始化
+onMounted(() => {
+  if (!isFirebaseReady()) {
+    autoInitFirebase()
+  }
+})
+
+const { sendPhoneSmsCode, confirmPhoneSmsCode, setupPhoneUserProfile, loginWithNickname, sendLoginCode, loginWithEmailCode } = useAuthFunctions()
 
 const authMethod = ref('email')
 const email = ref('')
-const password = ref('')
+const emailLoginCode = ref('')
+const emailLoginCodeSent = ref(false)
+const emailLoginCodeSending = ref(false)
+const emailLoginCountdown = ref(0)
+let emailLoginCountdownTimer = null
 const countryCode = ref('+86')
 const phoneNumber = ref('')
 const smsCode = ref('')
@@ -159,39 +184,125 @@ const successMsg = ref('')
 const loading = ref(false)
 const showNicknameDialog = ref(false)
 const nickname = ref('')
+const guestNickname = ref('')
+const guestPassword = ref('')
+const guestLoading = ref(false)
+const nicknameAvailable = ref(null)
+const nicknameChecking = ref(false)
+
+// GFW 代理设置
+const proxyUrl = ref(loadAuthProxyUrl())
+const proxyTesting = ref(false)
+const proxyStatus = ref('')
+const proxyStatusOk = ref(false)
+
+async function handleTestProxy() {
+  const url = proxyUrl.value.trim()
+  if (!url) { proxyStatus.value = '请输入代理地址'; proxyStatusOk.value = false; return }
+  proxyTesting.value = true
+  proxyStatus.value = ''
+  const result = await testAuthProxy(url)
+  proxyTesting.value = false
+  if (result.ok) {
+    proxyStatus.value = `连接成功，延迟 ${result.latency}ms`
+    proxyStatusOk.value = true
+  } else {
+    proxyStatus.value = `连接失败：${result.error}`
+    proxyStatusOk.value = false
+  }
+}
+
+function handleSaveProxy() {
+  const url = proxyUrl.value.trim()
+  if (!url) { proxyStatus.value = '请输入代理地址'; proxyStatusOk.value = false; return }
+  saveAuthProxyUrl(url)
+  enableAuthProxy(url)
+  proxyStatus.value = '代理已保存并启用'
+  proxyStatusOk.value = true
+}
+
+function handleDisableProxy() {
+  disableAuthProxy()
+  saveAuthProxyUrl('')
+  proxyUrl.value = ''
+  proxyStatus.value = ''
+}
+
+function handlePhoneTabClick() {
+  authMethod.value = 'phone'
+}
+
+let nicknameCheckTimer = null
+watch(nickname, (val) => {
+  nicknameAvailable.value = null
+  if (nicknameCheckTimer) clearTimeout(nicknameCheckTimer)
+  const trimmed = val.trim()
+  if (!trimmed || trimmed.length < 2 || trimmed.length > 20) return
+  nicknameChecking.value = true
+  nicknameCheckTimer = setTimeout(async () => {
+    try {
+      const taken = await isNicknameTaken(trimmed)
+      if (nickname.value.trim() === trimmed) {
+        nicknameAvailable.value = !taken
+      }
+    } catch {
+      nicknameAvailable.value = null
+    } finally {
+      if (nickname.value.trim() === trimmed) {
+        nicknameChecking.value = false
+      }
+    }
+  }, 300)
+})
+
+
 
 let countdownTimer = null
+let emailLoginCodeToken = ''
 
-async function handleEmailLogin() {
-  if (!email.value || !password.value) {
-    errorMsg.value = '请填写邮箱和密码'
+async function handleSendEmailLoginCode() {
+  if (!email.value) {
+    errorMsg.value = '请输入邮箱地址'
+    return
+  }
+  errorMsg.value = ''
+  emailLoginCodeSending.value = true
+  try {
+    emailLoginCodeToken = await sendLoginCode(email.value)
+    emailLoginCodeSent.value = true
+    successMsg.value = '验证码已发送到您的邮箱'
+    emailLoginCountdown.value = 60
+    if (emailLoginCountdownTimer) clearInterval(emailLoginCountdownTimer)
+    emailLoginCountdownTimer = setInterval(() => {
+      emailLoginCountdown.value--
+      if (emailLoginCountdown.value <= 0) {
+        clearInterval(emailLoginCountdownTimer)
+        emailLoginCountdownTimer = null
+      }
+    }, 1000)
+  } catch (e) {
+    errorMsg.value = e.message
+  } finally {
+    emailLoginCodeSending.value = false
+  }
+}
+
+async function handleEmailCodeLogin() {
+  if (!email.value || emailLoginCode.value.length < 6) {
+    errorMsg.value = '请输入邮箱和验证码'
     return
   }
   errorMsg.value = ''
   successMsg.value = ''
   loading.value = true
   try {
-    await loginWithEmail(email.value, password.value)
+    await loginWithEmailCode(email.value, emailLoginCode.value, emailLoginCodeToken)
     successMsg.value = '登录成功！'
     emit('back')
   } catch (e) {
     errorMsg.value = e.message
   } finally {
     loading.value = false
-  }
-}
-
-async function handleResetPassword() {
-  if (!email.value) {
-    errorMsg.value = '请先输入邮箱地址'
-    return
-  }
-  errorMsg.value = ''
-  try {
-    await resetPassword(email.value)
-    successMsg.value = '密码重置邮件已发送，请查收'
-  } catch (e) {
-    errorMsg.value = e.message
   }
 }
 
@@ -251,9 +362,11 @@ async function handlePhoneLogin() {
 }
 
 async function handleSetNickname() {
-  if (!nickname.value.trim() || nickname.value.trim().length < 2) return
+  const trimmed = nickname.value.trim()
+  if (!trimmed || trimmed.length < 2) return
+  errorMsg.value = ''
   try {
-    await updateDisplayName(nickname.value.trim())
+    await setupPhoneUserProfile(trimmed, countryCode.value + phoneNumber.value)
     showNicknameDialog.value = false
     successMsg.value = '昵称设置成功！'
     emit('back')
@@ -261,6 +374,26 @@ async function handleSetNickname() {
     errorMsg.value = e.message
   }
 }
+
+async function handleGuestLogin() {
+  if (!guestNickname.value.trim() || !guestPassword.value) {
+    errorMsg.value = '请输入昵称和密码'
+    return
+  }
+  errorMsg.value = ''
+  successMsg.value = ''
+  guestLoading.value = true
+  try {
+    await loginWithNickname(guestNickname.value.trim(), guestPassword.value)
+    successMsg.value = '登录成功！'
+    emit('back')
+  } catch (e) {
+    errorMsg.value = e.message
+  } finally {
+    guestLoading.value = false
+  }
+}
+
 </script>
 
 <style scoped>
@@ -475,6 +608,44 @@ async function handleSetNickname() {
   color: #34d399;
 }
 
+.proxy-section {
+  margin-top: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.proxy-summary {
+  cursor: pointer;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.45);
+  list-style: none;
+  transition: color 0.2s;
+}
+
+.proxy-summary:hover {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.proxy-summary::-webkit-details-marker {
+  display: none;
+}
+
+.proxy-summary::before {
+  content: '▶ ';
+  font-size: 10px;
+}
+
+details[open] > .proxy-summary::before {
+  content: '▼ ';
+}
+
+.proxy-content {
+  padding: 12px 14px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
 .auth-links {
   display: flex;
   justify-content: space-between;
@@ -516,6 +687,23 @@ async function handleSetNickname() {
 
 .nickname-dialog .form-input {
   margin-bottom: 12px;
+}
+
+.nickname-status {
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.nickname-status.checking {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.nickname-status.available {
+  color: #34d399;
+}
+
+.nickname-status.taken {
+  color: #f87171;
 }
 
 @media (max-width: 480px) {

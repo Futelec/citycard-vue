@@ -50,7 +50,7 @@
       >
         <span class="filter-icon">{{ filterOption.icon }}</span>
         <span class="filter-text">{{ filterOption.label }}</span>
-        <span class="filter-count">{{ getFilterCount(filterOption.id) }}</span>
+        <span class="filter-count">{{ filterCounts[filterOption.id] || 0 }}</span>
       </button>
     </div>
 
@@ -293,14 +293,17 @@ function isNewLog(log) {
 }
 
 /**
- * 获取过滤器计数
+ * 过滤器计数（computed缓存，避免每次渲染重复计算）
  */
-function getFilterCount(filterId) {
-  if (filterId === 'all') {
-    return allLogs.value.length
+const filterCounts = computed(() => {
+  const counts = { all: allLogs.value.length }
+  for (const log of allLogs.value) {
+    if (log.type) {
+      counts[log.type] = (counts[log.type] || 0) + 1
+    }
   }
-  return allLogs.value.filter(log => log.type === filterId).length
-}
+  return counts
+})
 
 /**
  * 滚动到底部

@@ -3,6 +3,7 @@
  * 从游戏状态中提取用于动画展示的数据
  */
 import { debugLog } from '../../utils/debug'
+import { PROVINCE_MAP } from '../../data/cities'
 
 /**
  * 准备战斗动画数据
@@ -113,7 +114,7 @@ export function prepareBattleAnimationData(roomData, gameStore) {
       battleCities1 = player1Objects.map((cityObj, idx) => {
         return {
           name: cityObj.name,
-          province: cityObj.province,
+          province: cityObj.province || '直辖市和特区',
           isCapital: cityObj.isCapital || false,
           isProvincialCapital: cityObj.isProvincialCapital || false,
           initialHp: cityObj.currentHp,
@@ -128,7 +129,7 @@ export function prepareBattleAnimationData(roomData, gameStore) {
       battleCities2 = player2Objects.map((cityObj, idx) => {
         return {
           name: cityObj.name,
-          province: cityObj.province,
+          province: cityObj.province || '直辖市和特区',
           isCapital: cityObj.isCapital || false,
           isProvincialCapital: cityObj.isProvincialCapital || false,
           initialHp: cityObj.currentHp,
@@ -165,7 +166,7 @@ export function prepareBattleAnimationData(roomData, gameStore) {
         }
         return {
           name: city.name,
-          province: city.province,
+          province: city.province || (PROVINCE_MAP[city.name] && PROVINCE_MAP[city.name].name) || '直辖市和特区',
           isCapital: city.isCapital,
           isProvincialCapital: city.isProvincialCapital,
           initialHp: city.currentHp,
@@ -185,7 +186,7 @@ export function prepareBattleAnimationData(roomData, gameStore) {
         }
         return {
           name: city.name,
-          province: city.province,
+          province: city.province || (PROVINCE_MAP[city.name] && PROVINCE_MAP[city.name].name) || '直辖市和特区',
           isCapital: city.isCapital,
           isProvincialCapital: city.isProvincialCapital,
           initialHp: city.currentHp,
@@ -204,7 +205,7 @@ export function prepareBattleAnimationData(roomData, gameStore) {
       if (!city) { console.warn('[BattleAnimationData] player1城市不存在:', card.cityName); return null }
       return {
         name: city.name,
-        province: city.province,
+        province: city.province || (PROVINCE_MAP[city.name] && PROVINCE_MAP[city.name].name) || '直辖市和特区',
         isCapital: city.isCapital,
         isProvincialCapital: city.isProvincialCapital,
         initialHp: city.currentHp,
@@ -221,7 +222,7 @@ export function prepareBattleAnimationData(roomData, gameStore) {
       if (!city) { console.warn('[BattleAnimationData] player2城市不存在:', card.cityName); return null }
       return {
         name: city.name,
-        province: city.province,
+        province: city.province || (PROVINCE_MAP[city.name] && PROVINCE_MAP[city.name].name) || '直辖市和特区',
         isCapital: city.isCapital,
         isProvincialCapital: city.isProvincialCapital,
         initialHp: city.currentHp,
@@ -250,11 +251,13 @@ export function prepareBattleAnimationData(roomData, gameStore) {
     round: gameState.currentRound || 1,
     player1: {
       name: player1.name,
+      avatar: player1.avatar || '',
       cities: battleCities1,
       totalAttack: totalAttack1
     },
     player2: {
       name: player2.name,
+      avatar: player2.avatar || '',
       cities: battleCities2,
       totalAttack: totalAttack2
     },

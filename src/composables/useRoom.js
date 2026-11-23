@@ -2,6 +2,7 @@ import { ref, reactive, onUnmounted } from 'vue'
 import { getDatabase, ref as dbRef, set, get, onValue, off, remove, update } from 'firebase/database'
 import { isFirebaseReady } from './useFirebase'
 import { debugLog } from '../utils/debug'
+import { getClientIP } from '../utils/clientIP'
 
 // 房间过期时间配置（24小时内无活动则自动过期）
 const ROOM_EXPIRY_MS = 24 * 60 * 60 * 1000 // 24小时
@@ -678,14 +679,25 @@ export function useRoom() {
           // 使用最新数据
           data.players = freshData.players
         }
+        // 记录第一位加入的玩家为房主（用于“仅房主分配城市”防竞态）
+        if (!data.hostName && data.players.length === 0) {
+          data.hostName = player.name
+        }
         // 新玩家
+        const clientIP = await getClientIP()
+        debugLog('[加入房间] 获取到客户端IP:', clientIP || '(获取失败)')
         data.players.push({
           name: player.name,
+          avatar: player.avatar || '',
+          firebaseUid: player.firebaseUid || '',
           cities: player.cities || [],
           gold: 0,
           ready: false,
-          joinedAt: Date.now()
+          joinedAt: Date.now(),
+          clientIP: clientIP || ''
         })
+        if (!data.clientIPs) data.clientIPs = {}
+        data.clientIPs[player.name] = clientIP || ''
       }
       isSpectator.value = false
     }

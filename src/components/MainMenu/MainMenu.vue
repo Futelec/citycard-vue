@@ -5,10 +5,19 @@
       <button v-if="!authStore.isLoggedIn" class="top-auth-btn login" @click="$emit('show-login')">
         登录 / 注册
       </button>
-      <button v-else class="top-auth-btn user" @click="$emit('show-profile')">
-        <span class="top-auth-avatar">{{ avatarInitial }}</span>
-        <span class="top-auth-name">{{ authStore.displayName || '用户' }}</span>
-      </button>
+      <template v-else>
+        <button class="top-auth-btn user" @click="showSelfProfile = true">
+          <span v-if="authStore.avatar && authStore.avatar.startsWith('data:')" class="top-auth-avatar img">
+            <img :src="authStore.avatar" alt="avatar" />
+          </span>
+          <span v-else-if="authStore.avatar" class="top-auth-avatar emoji">{{ authStore.avatar }}</span>
+          <span v-else class="top-auth-avatar">{{ avatarInitial }}</span>
+          <span class="top-auth-name">{{ authStore.displayName || '用户' }}</span>
+        </button>
+        <button class="top-search-btn" @click="guardedEmit('show-player-search')">
+          <span class="search-icon">🔍</span>
+        </button>
+      </template>
     </div>
 
     <div class="menu-container">
@@ -20,7 +29,7 @@
 
       <!-- 主要游戏模式 -->
       <div class="game-modes">
-        <div class="mode-card primary" @click="$emit('enter-player-mode')">
+        <div class="mode-card primary" @click="guardedEmit('enter-player-mode')">
           <div class="mode-icon">🎮</div>
           <h3 class="mode-title">开始游戏</h3>
           <p class="mode-desc">单机模式 / 在线对战</p>
@@ -34,19 +43,19 @@
           <span class="btn-icon">📜</span>
           <span class="btn-text">游戏介绍</span>
         </button>
-        <button class="menu-btn" @click="$emit('show-skill-guide')">
+        <button class="menu-btn" @click="guardedEmit('show-skill-guide')">
           <span class="btn-icon">📖</span>
           <span class="btn-text">技能介绍</span>
         </button>
-        <button class="menu-btn" @click="$emit('show-question-bank')">
+        <button class="menu-btn" @click="guardedEmit('show-question-bank')">
           <span class="btn-icon">🏙️</span>
           <span class="btn-text">城市题库</span>
         </button>
-        <button class="menu-btn" @click="$emit('show-city-info')">
+        <button class="menu-btn" @click="guardedEmit('show-city-info')">
           <span class="btn-icon">ℹ️</span>
           <span class="btn-text">城市介绍</span>
         </button>
-        <button class="menu-btn" @click="$emit('show-changelog')">
+        <button class="menu-btn" @click="guardedEmit('show-changelog')">
           <span class="btn-icon">📋</span>
           <span class="btn-text">更新日志</span>
         </button>
@@ -59,26 +68,136 @@
           <p>开发者团队：Futelec Game Studio</p>
         </div>
         <div class="footer-right">
-          <p>Version 1.0.12</p>
+          <p>Version 1.1.0</p>
         </div>
       </div>
 
     </div>
+
+    <!-- 个人主页弹窗 -->
+    <Teleport to="body">
+      <div v-if="showSelfProfile" class="profile-overlay">
+        <div class="profile-modal">
+          <div class="profile-modal-header">
+            <h2 class="profile-modal-title">个人主页</h2>
+            <button class="profile-close-btn" @click="showSelfProfile = false">&times;</button>
+          </div>
+          <div class="profile-modal-body">
+            <span v-if="authStore.avatar && authStore.avatar.startsWith('data:')" class="profile-avatar-lg img">
+              <img :src="authStore.avatar" alt="avatar" />
+            </span>
+            <span v-else-if="authStore.avatar" class="profile-avatar-lg emoji">{{ authStore.avatar }}</span>
+            <span v-else class="profile-avatar-lg">{{ avatarInitial }}</span>
+            <div class="profile-nickname">{{ authStore.displayName || '用户' }}</div>
+            <div class="profile-uid">UID: {{ authStore.customUid || '-' }}</div>
+
+            <div class="profile-stats-grid">
+              <div class="profile-stat-item">
+                <span class="profile-stat-value">{{ total }}</span>
+                <span class="profile-stat-label">总场次</span>
+              </div>
+              <div class="profile-stat-item wins">
+                <span class="profile-stat-value">{{ wins }}</span>
+                <span class="profile-stat-label">胜利</span>
+              </div>
+              <div class="profile-stat-item losses">
+                <span class="profile-stat-value">{{ losses }}</span>
+                <span class="profile-stat-label">失败</span>
+              </div>
+              <div class="profile-stat-item winrate">
+                <span class="profile-stat-value">{{ winRate }}%</span>
+                <span class="profile-stat-label">胜率</span>
+              </div>
+            </div>
+
+            <div class="profile-social-counts">
+              <div class="profile-social-item" @click="openFollowers">
+                <span class="profile-social-value">{{ followersCount }}</span>
+                <span class="profile-social-label">粉丝</span>
+              </div>
+              <div class="profile-social-item" @click="openFollowing">
+                <span class="profile-social-value">{{ followingCount }}</span>
+                <span class="profile-social-label">关注</span>
+              </div>
+            </div>
+
+            <button class="profile-settings-btn" @click="guardedEmit('show-profile')">
+              账号设置
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useAuthStore } from '../../stores/authStore'
+import { usePlayerStats } from '../../composables/usePlayerStats'
+import { loadFollowCounts } from '../../composables/useFollow'
+import { useDialog } from '../../composables/useDialog'
 
-defineEmits(['enter-player-mode', 'show-game-intro', 'show-skill-guide', 'show-question-bank', 'show-city-info', 'show-changelog', 'show-login', 'show-profile'])
+const emit = defineEmits(['enter-player-mode', 'show-game-intro', 'show-skill-guide', 'show-question-bank', 'show-city-info', 'show-changelog', 'show-login', 'show-profile', 'show-player-search', 'show-follow-list'])
 
 const authStore = useAuthStore()
+const { showAlert } = useDialog()
+const { wins, losses, total, winRate, loadStats } = usePlayerStats()
+
+const showSelfProfile = ref(false)
 
 const avatarInitial = computed(() => {
   const name = authStore.displayName
   return name ? name.charAt(0).toUpperCase() : '?'
 })
+
+// 关注/粉丝计数
+const followersCount = ref(0)
+const followingCount = ref(0)
+
+watch(() => authStore.uid, (uid) => {
+  if (uid) {
+    loadStats(uid)
+    const fc = loadFollowCounts(uid)
+    fc.load().then(() => {
+      followersCount.value = fc.followersCount.value
+      followingCount.value = fc.followingCount.value
+    })
+  }
+}, { immediate: true })
+
+function guardedEmit(eventName, payload) {
+  if (!authStore.isLoggedIn) {
+    showAlert('请先注册或登录')
+    return
+  }
+  showSelfProfile.value = false
+  if (payload !== undefined) {
+    emit(eventName, payload)
+  } else {
+    emit(eventName)
+  }
+}
+
+function openFollowers() {
+  guardedEmit('show-follow-list', { type: 'followers', firebaseUid: authStore.uid })
+}
+
+function openFollowing() {
+  guardedEmit('show-follow-list', { type: 'following', firebaseUid: authStore.uid })
+}
+
+function refreshFollowCounts() {
+  if (authStore.uid) {
+    const fc = loadFollowCounts(authStore.uid)
+    fc.load().then(() => {
+      followersCount.value = fc.followersCount.value
+      followingCount.value = fc.followingCount.value
+    })
+  }
+}
+
+defineExpose({ refreshFollowCounts })
 </script>
 
 <style scoped>
@@ -98,6 +217,10 @@ const avatarInitial = computed(() => {
   top: 16px;
   right: 20px;
   z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
 }
 
 .top-auth-btn {
@@ -136,6 +259,23 @@ const avatarInitial = computed(() => {
   font-weight: 700;
   color: white;
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.top-auth-avatar.img {
+  background: none;
+}
+
+.top-auth-avatar.emoji {
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.top-auth-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .top-auth-name {
@@ -735,5 +875,216 @@ const avatarInitial = computed(() => {
   .btn-text {
     font-size: 13px;
   }
+}
+/* 搜索按钮（右上角） */
+.top-search-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
+  backdrop-filter: blur(8px);
+}
+
+.top-search-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(212, 160, 23, 0.4);
+  box-shadow: 0 4px 14px rgba(212, 160, 23, 0.2);
+}
+
+.top-search-btn .search-icon {
+  font-size: 16px;
+}
+
+/* 个人主页弹窗 */
+.profile-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1001;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.profile-modal {
+  background: linear-gradient(135deg, #1e2a4a 0%, #2a2340 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  padding: 28px;
+  width: 90%;
+  max-width: 400px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.profile-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.profile-modal-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.9);
+  margin: 0;
+}
+
+.profile-close-btn {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 28px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 4px;
+  transition: color 0.2s;
+}
+
+.profile-close-btn:hover {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.profile-modal-body {
+  text-align: center;
+}
+
+.profile-avatar-lg {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #d4a017, #b8860b);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  color: white;
+  font-weight: 700;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+.profile-avatar-lg.img {
+  background: none;
+}
+
+.profile-avatar-lg.emoji {
+  font-size: 40px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.profile-avatar-lg img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-nickname {
+  font-size: 22px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.profile-uid {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.4);
+  margin-top: 4px;
+  margin-bottom: 16px;
+}
+
+.profile-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.profile-stat-item {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 12px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.profile-stat-value {
+  font-size: 18px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.profile-stat-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.profile-stat-item.wins { border-color: rgba(34, 197, 94, 0.25); }
+.profile-stat-item.wins .profile-stat-value { color: #4ade80; }
+.profile-stat-item.losses { border-color: rgba(239, 68, 68, 0.25); }
+.profile-stat-item.losses .profile-stat-value { color: #f87171; }
+.profile-stat-item.winrate { border-color: rgba(212, 160, 23, 0.25); }
+.profile-stat-item.winrate .profile-stat-value { color: #f0c850; }
+
+.profile-social-counts {
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+  margin-bottom: 20px;
+}
+
+.profile-social-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  padding: 8px 16px;
+  border-radius: 10px;
+  transition: background 0.2s;
+}
+
+.profile-social-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.profile-social-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.profile-social-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.45);
+  margin-top: 2px;
+}
+
+.profile-settings-btn {
+  padding: 10px 36px;
+  background: linear-gradient(135deg, #d4a017 0%, #b8860b 100%);
+  border: none;
+  border-radius: 20px;
+  color: white;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 14px rgba(212, 160, 23, 0.4);
+}
+
+.profile-settings-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(212, 160, 23, 0.5);
 }
 </style>

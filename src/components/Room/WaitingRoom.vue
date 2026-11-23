@@ -1,5 +1,10 @@
 <template>
   <div class="waiting-room-container">
+    <!-- 返回主界面按钮 -->
+    <button class="back-to-menu-btn" @click="$emit('back')">
+      ← 返回主界面
+    </button>
+
     <!-- 房间号显示 -->
     <div class="room-id-card">
       <div class="room-id-header">
@@ -25,17 +30,24 @@
       </div>
     </div>
 
-    <!-- 昵称输入 -->
+    <!-- 昵称输入 / 已登录欢迎 -->
     <div v-if="!hasJoined" class="nickname-card">
-      <div class="nickname-header">请输入你的昵称</div>
-      <input
-        v-model="nickname"
-        type="text"
-        class="nickname-input"
-        placeholder="输入昵称"
-        maxlength="20"
-        @keyup.enter="nickname.trim() && !forceSpectator && confirmNickname(false)"
-      />
+      <!-- 已登录用户：直接显示欢迎信息 -->
+      <template v-if="authStore.isLoggedIn">
+        <div class="nickname-header">欢迎, {{ authStore.displayName }}</div>
+      </template>
+      <!-- 未登录用户：显示昵称输入框（理论上有门控不会触发） -->
+      <template v-else>
+        <div class="nickname-header">请输入你的昵称</div>
+        <input
+          v-model="nickname"
+          type="text"
+          class="nickname-input"
+          placeholder="输入昵称"
+          maxlength="20"
+          @keyup.enter="nickname.trim() && !forceSpectator && confirmNickname(false)"
+        />
+      </template>
 
       <div class="join-mode-section">
         <div v-if="forceSpectator" class="room-full-notice">
@@ -49,7 +61,7 @@
             v-if="!forceSpectator"
             class="join-btn join-btn-battle"
             @click="confirmNickname(false)"
-            :disabled="!nickname.trim()"
+            :disabled="!authStore.isLoggedIn && !nickname.trim()"
           >
             <span class="btn-emoji">⚔️</span>
             <span class="btn-label">加入战斗</span>
@@ -57,7 +69,7 @@
           <button
             class="join-btn join-btn-spectate"
             @click="confirmNickname(true)"
-            :disabled="!nickname.trim()"
+            :disabled="!authStore.isLoggedIn && !nickname.trim()"
           >
             <span class="btn-emoji">👁️</span>
             <span class="btn-label">加入围观</span>
@@ -312,6 +324,7 @@ import { useDialog } from '../../composables/useDialog'
 import { useCityDraw } from '../../composables/useCityDraw'
 import { PROVINCE_MAP } from '../../data/cities'
 import { useGameStore } from '../../stores/gameStore'
+import { useAuthStore } from '../../stores/authStore'
 import { debugLog } from '../../utils/debug'
 
 const props = defineProps({
@@ -333,9 +346,10 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['all-ready', 'player-joined', 'reconnect-to-game'])
+const emit = defineEmits(['all-ready', 'player-joined', 'reconnect-to-game', 'back'])
 
 const gameStore = useGameStore()
+const authStore = useAuthStore()
 const { showNotification } = useNotification()
 const { showConfirm } = useDialog()
 const { assignCitiesToPlayers } = useCityDraw()
@@ -362,6 +376,14 @@ const logFilter = ref('all')
 const logContainer = ref(null)
 const allReadyEmitted = ref(false)  // 防止重复触发all-ready
 const isAssigningCities = ref(false) // 防止同一客户端并发分配城市
+
+// 是否为房主（房主 = 房间中第一位加入的玩家）
+// 房间数据缺少 hostName 时返回 true，兼容旧房间，避免无人分配城市
+const isHost = computed(() => {
+  const hostName = roomData.value?.hostName
+  if (!hostName) return true
+  return hostName === currentPlayerName.value
+})
 
 // 初始化房间数据
 if (props.initialRoomData) {
@@ -513,34 +535,39 @@ function copyRoomId() {
  * 确认昵称并加入房间
  */
 async function confirmNickname(asSpectator = false) {
-  if (!nickname.value.trim()) {
+  // Use auth store display name if logged in, otherwise use manual input
+  const playerName = authStore.isLoggedIn ? authStore.displayName : nickname.value.trim()
+
+  if (!playerName) {
     showNotification('请输入昵称！', 'warning')
     return
   }
 
   const result = await addPlayerToRoom(props.roomId, {
-    name: nickname.value.trim()
+    name: playerName,
+    firebaseUid: authStore.uid || '',
+    avatar: authStore.avatar || ''
   }, asSpectator)
 
   if (result.success) {
     hasJoined.value = true
-    currentPlayerName.value = nickname.value.trim()
+    currentPlayerName.value = playerName
 
     // Check if game is already active (mid-game reconnection)
     const data = result.roomData
     if (data?.gameState?.playerStates) {
-      const playerState = data.gameState.playerStates[nickname.value.trim()]
-      const playerData = data.players?.find(p => p.name === nickname.value.trim())
+      const playerState = data.gameState.playerStates[playerName]
+      const playerData = data.players?.find(p => p.name === playerName)
       if (playerState && playerData?.centerCityName) {
         debugLog('[WaitingRoom] 检测到游戏已在进行中，触发mid-game重连')
         showNotification('重新连接到游戏！', 'success')
-        emit('reconnect-to-game', { name: nickname.value.trim() })
+        emit('reconnect-to-game', { name: playerName })
         return
       }
     }
 
     showNotification('加入成功！', 'success')
-    emit('player-joined', { name: nickname.value.trim(), asSpectator })
+    emit('player-joined', { name: playerName, asSpectator })
   } else {
     showNotification(result.error || '加入失败', 'error')
   }
@@ -620,6 +647,13 @@ watch(() => roomData.value, async (newData) => {
 
   debugLog('[WaitingRoom] 所有玩家已准备，检查城市分配')
 
+  // 关键修复：只有房主负责分配城市，避免多客户端同时分配导致竞态条件
+  // 非房主客户端等待 Firebase 监听器通知城市已分配（由上方 alreadyAssigned 检查处理）
+  if (!isHost.value) {
+    debugLog('[WaitingRoom] 非房主客户端，等待房主分配城市')
+    return
+  }
+
   // 防止同一客户端并发分配
   if (isAssigningCities.value) {
     debugLog('[WaitingRoom] 正在分配城市中，跳过')
@@ -685,7 +719,8 @@ onMounted(async () => {
   if (props.reconnectedPlayerName) {
     debugLog('[WaitingRoom] Auto-joining with reconnected player name:', props.reconnectedPlayerName)
     const result = await addPlayerToRoom(props.roomId, {
-      name: props.reconnectedPlayerName
+      name: props.reconnectedPlayerName,
+      avatar: authStore.avatar || ''
     }, false)
 
     if (result.success) {
@@ -727,6 +762,29 @@ onUnmounted(() => {
   padding: 40px 20px;
   position: relative;
   overflow: hidden;
+}
+
+.back-to-menu-btn {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 10;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+  backdrop-filter: blur(8px);
+}
+
+.back-to-menu-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(212, 160, 23, 0.4);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 /* Floating lanterns / gathering lights */

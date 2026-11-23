@@ -1,5 +1,6 @@
 <template>
-  <div v-if="drawRequests.length > 0" class="draw-request-panel">
+  <div v-if="drawRequests.length > 0" class="draw-request-overlay">
+  <div class="draw-request-panel">
     <div class="panel-header">
       <div class="header-icon">🤝</div>
       <h3 class="header-title">求和请求</h3>
@@ -30,6 +31,7 @@
         </div>
       </div>
     </div>
+  </div>
   </div>
 </template>
 
@@ -62,11 +64,17 @@ function handleReject(request) {
 </script>
 
 <style scoped>
-.draw-request-panel {
+.draw-request-overlay {
   position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  inset: 0;
+  z-index: 10003;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.draw-request-panel {
   background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
   border: 3px solid #f59e0b;
   border-radius: 16px;
@@ -74,18 +82,17 @@ function handleReject(request) {
   max-width: 480px;
   width: 90%;
   box-shadow: 0 20px 60px rgba(30, 41, 59, 0.35);
-  z-index: 9999;
   animation: slideIn 0.3s ease-out;
 }
 
 @keyframes slideIn {
   from {
     opacity: 0;
-    transform: translate(-50%, -60%);
+    transform: translateY(-20px);
   }
   to {
     opacity: 1;
-    transform: translate(-50%, -50%);
+    transform: translateY(0);
   }
 }
 
